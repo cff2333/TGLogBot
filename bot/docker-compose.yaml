@@ -1,0 +1,30 @@
+services:
+  tg-bot:
+    image: python:3.9-slim
+    container_name: tg-bot
+    restart: always
+    working_dir: /app
+    volumes:
+      - ./tg_bot.py:/app/tg_bot.py:ro
+      - ./logs:/app/logs
+    environment:
+      - TG_BOT_TOKEN=
+      - TG_ALLOWED_CHATS=
+      - DB_HOST=        # 填写 MySQL 所在机器的 IP，不能用 127.0.0.1
+      - DB_PORT=
+      - DB_USER=
+      - DB_PASS=
+      - DB_NAME=tg_log
+      - DUP_LIMIT=3
+      - DUP_WINDOW=30
+      - CLEANUP_INTERVAL=60
+      - BATCH_INTERVAL=2
+      - PROXY_URL=  # 不需要代理则留空或删除此行
+    command: >
+      bash -c "pip install python-telegram-bot aiomysql -q -i https://pypi.tuna.tsinghua.edu.cn/simple
+      && python tg_bot.py"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TG 日志管理后台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg0: #0d0f12;
+  --bg1: #13161b;
+  --bg2: #1a1e25;
+  --bg3: #222730;
+  --border: #2a2f3a;
+  --border2: #363d4a;
+  --accent: #4f9cf9;
+  --accent2: #38bdf8;
+  --green: #34d399;
+  --red: #f87171;
+  --amber: #fbbf24;
+  --text0: #e8eaf0;
+  --text1: #9aa3b2;
+  --text2: #5a6272;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Noto Sans SC', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg0); color: var(--text0); font-family: var(--sans); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+
+/* ── 布局 ── */
+.layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+
+/* ── 侧边栏 ── */
+.sidebar {
+  background: var(--bg1);
+  border-right: 1px solid var(--border);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+.logo {
+  padding: 24px 20px 20px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--accent);
+}
+.logo span { color: var(--text1); font-weight: 400; display: block; font-size: 11px; margin-top: 3px; letter-spacing: .04em; }
+nav { padding: 12px 0; flex: 1; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  cursor: pointer;
+  color: var(--text1);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all .15s;
+  border-left: 2px solid transparent;
+  user-select: none;
+}
+.nav-item:hover { color: var(--text0); background: var(--bg2); }
+.nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(79,156,249,.07); }
+.nav-icon { width: 16px; height: 16px; opacity: .7; flex-shrink: 0; }
+.nav-item.active .nav-icon { opacity: 1; }
+.sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border); }
+.api-input { width: 100%; background: var(--bg2); border: 1px solid var(--border2); color: var(--text0); padding: 7px 10px; border-radius: 6px; font-family: var(--mono); font-size: 11px; outline: none; }
+.api-input:focus { border-color: var(--accent); }
+.api-label { font-size: 11px; color: var(--text2); margin-bottom: 5px; letter-spacing: .04em; }
+
+/* ── 主内容 ── */
+.main { padding: 32px 36px; overflow-x: hidden; }
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── 页面标题 ── */
+.page-header { margin-bottom: 28px; }
+.page-title { font-size: 20px; font-weight: 500; color: var(--text0); font-family: var(--mono); }
+.page-sub { font-size: 12px; color: var(--text2); margin-top: 4px; letter-spacing: .03em; }
+
+/* ── 概览卡片 ── */
+.stat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
+.stat-card {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  transition: border-color .2s;
+}
+.stat-card:hover { border-color: var(--border2); }
+.stat-label { font-size: 11px; color: var(--text2); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
+.stat-value { font-size: 26px; font-weight: 700; font-family: var(--mono); color: var(--text0); }
+.stat-value.accent { color: var(--accent); }
+.stat-value.green  { color: var(--green); }
+.stat-value.red    { color: var(--red); }
+.stat-value.amber  { color: var(--amber); }
+
+/* ── 图表行 ── */
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+.chart-card {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+.chart-title { font-size: 12px; font-weight: 500; color: var(--text1); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 16px; }
+.chart-wrap { position: relative; height: 200px; }
+
+/* ── 工具栏 ── */
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.toolbar-label { font-size: 12px; color: var(--text2); white-space: nowrap; }
+select, input[type=text], input[type=date], input[type=number] {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  color: var(--text0);
+  padding: 7px 11px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--sans);
+  outline: none;
+  transition: border-color .15s;
+}
+select:focus, input:focus { border-color: var(--accent); }
+select { cursor: pointer; }
+.btn {
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: none;
+  font-size: 13px;
+  font-family: var(--sans);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-ghost { background: var(--bg2); color: var(--text1); border: 1px solid var(--border2); }
+.btn-ghost:hover { color: var(--text0); border-color: var(--border2); background: var(--bg3); }
+.btn-danger { background: rgba(248,113,113,.12); color: var(--red); border: 1px solid rgba(248,113,113,.2); }
+.spacer { flex: 1; }
+
+/* ── 表格 ── */
+.table-wrap { background: var(--bg1); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+table { width: 100%; border-collapse: collapse; }
+thead tr { background: var(--bg2); }
+th { padding: 11px 16px; text-align: left; font-size: 11px; font-weight: 500; color: var(--text2); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+td { padding: 11px 16px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text0); }
+tbody tr:hover td { background: var(--bg2); }
+.td-mono { font-family: var(--mono); font-size: 12px; }
+.td-muted { color: var(--text1); }
+.td-content { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--mono);
+  font-weight: 500;
+}
+.badge-blue  { background: rgba(79,156,249,.15); color: var(--accent); }
+.badge-green { background: rgba(52,211,153,.15); color: var(--green); }
+.badge-red   { background: rgba(248,113,113,.15); color: var(--red); }
+.badge-amber { background: rgba(251,191,36,.15);  color: var(--amber); }
+
+/* ── 分页 ── */
+.pagination { display: flex; align-items: center; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+.page-btn {
+  width: 32px; height: 32px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  color: var(--text1);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.page-btn:hover:not(:disabled) { color: var(--text0); border-color: var(--accent); }
+.page-btn:disabled { opacity: .3; cursor: not-allowed; }
+.page-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.page-info { font-size: 12px; color: var(--text2); font-family: var(--mono); padding: 0 4px; }
+
+/* ── 空状态 ── */
+.empty { padding: 60px 20px; text-align: center; color: var(--text2); font-size: 13px; }
+.empty-icon { font-size: 32px; margin-bottom: 12px; opacity: .4; }
+
+/* ── 搜索高亮 ── */
+.hl { background: rgba(251,191,36,.25); color: var(--amber); border-radius: 2px; padding: 0 2px; }
+
+/* ── 加载 ── */
+.loading { padding: 40px; text-align: center; color: var(--text2); font-family: var(--mono); font-size: 12px; }
+.loading::after { content: ''; display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; margin-left: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 排行榜 ── */
+.rank-list { }
+.rank-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.rank-row:last-child { border-bottom: none; }
+.rank-num { width: 28px; font-family: var(--mono); font-size: 13px; color: var(--text2); text-align: center; flex-shrink: 0; }
+.rank-num.top { color: var(--amber); font-weight: 700; }
+.rank-name { flex: 1; font-size: 13px; color: var(--text0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-bar-wrap { width: 120px; height: 4px; background: var(--bg3); border-radius: 2px; flex-shrink: 0; }
+.rank-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width .4s ease; }
+.rank-count { width: 56px; text-align: right; font-family: var(--mono); font-size: 13px; color: var(--accent); flex-shrink: 0; }
+
+/* ── 响应式 ── */
+@media (max-width: 1100px) {
+  .stat-grid { grid-template-columns: repeat(3, 1fr); }
+  .chart-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { height: auto; position: static; flex-direction: row; flex-wrap: wrap; }
+  .main { padding: 20px 16px; }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- 侧边栏 -->
+  <aside class="sidebar">
+    <div class="logo">
+      TG_LOG<span>// 发言日志管理系统</span>
+    </div>
+    <nav>
+      <div class="nav-item active" onclick="nav('overview')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+          <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+        </svg>
+        概览
+      </div>
+      <div class="nav-item" onclick="nav('rank')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 12h2V6H2v6zM7 12h2V3H7v9zM12 12h2V8h-2v4z"/>
+        </svg>
+        发言排行
+      </div>
+      <div class="nav-item" onclick="nav('search')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="6.5" cy="6.5" r="4.5"/><path d="M10.5 10.5L14 14" stroke-linecap="round"/>
+        </svg>
+        关键词搜索
+      </div>
+      <div class="nav-item" onclick="nav('duplog')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M13 4L6 11l-3-3"/><circle cx="8" cy="8" r="7"/>
+        </svg>
+        重复消息日志
+      </div>
+      <div class="nav-item" onclick="nav('export')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1"/>
+        </svg>
+        导出日志
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="api-label">API 地址</div>
+      <input class="api-input" id="apiBase" value="http://127.0.0.1:8000" oninput="saveApi()" placeholder="http://...">
+    </div>
+  </aside>
+
+  <!-- 主内容 -->
+  <main class="main">
+
+    <!-- 概览 -->
+    <div class="page active" id="page-overview">
+      <div class="page-header">
+        <div class="page-title">overview</div>
+        <div class="page-sub">系统运行概况</div>
+      </div>
+
+      <!-- 群组选择 -->
+      <div class="toolbar" style="margin-bottom:20px">
+        <span class="toolbar-label">当前群组</span>
+        <select id="ov-group" onchange="loadOverview()">
+          <option value="">加载中...</option>
+        </select>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost" onclick="loadOverview()">刷新</button>
+      </div>
+
+      <div class="stat-grid" id="ov-stats">
+        <div class="stat-card"><div class="stat-label">群组数</div><div class="stat-value accent" id="s-groups">—</div></div>
+        <div class="stat-card"><div class="stat-label">用户数</div><div class="stat-value" id="s-users">—</div></div>
+        <div class="stat-card"><div class="stat-label">消息总数</div><div class="stat-value green" id="s-msgs">—</div></div>
+        <div class="stat-card"><div class="stat-label">已删除</div><div class="stat-value red" id="s-del">—</div></div>
+        <div class="stat-card"><div class="stat-label">触发重复</div><div class="stat-value amber" id="s-dup">—</div></div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-title">每日消息趋势（近 30 天）</div>
+          <div class="chart-wrap"><canvas id="chart-daily"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">活跃时段分布（24h）</div>
+          <div class="chart-wrap"><canvas id="chart-hourly"></canvas></div>
+        </div>
+      </div>
+
+      <!-- 群组列表 -->
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>群组名称</th><th>Chat ID</th><th>总消息</th><th>已删除</th><th>状态</th>
+          </tr></thead>
+          <tbody id="group-list"><tr><td colspan="5" class="loading">加载中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 发言排行 -->
+    <div class="page" id="page-rank">
+      <div class="page-header">
+        <div class="page-title">leaderboard</div>
+        <div class="page-sub">群组发言次数排行</div>
+      </div>
+      <div class="toolbar">
+        <span class="toolbar-label">群组</span>
+        <select id="rank-group"></select>
+        <span class="toolbar-label">开始日期</span>
+        <input type="date" id="rank-from">
+        <span class="toolbar-label">结束日期</span>
+        <input type="date" id="rank-to">
+        <span class="toolbar-label">显示条数</span>
+        <select id="rank-limit">
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="50">50</option>
+        </select>
+        <button class="btn btn-primary" onclick="loadRank()">查询</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="chart-card">
+          <div class="chart-title">发言分布</div>
+          <div class="chart-wrap"><canvas id="chart-rank"></canvas></div>
+        </div>
+        <div class="chart-card" style="overflow:auto;max-height:320px">
+          <div class="chart-title">排行榜</div>
+          <div class="rank-list" id="rank-list"><div class="empty"><div class="empty-icon">📊</div>请选择群组后查询</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 关键词搜索 -->
+    <div class="page" id="page-search">
+      <div class="page-header">
+        <div class="page-title">search</div>
+        <div class="page-sub">关键词全文搜索</div>
+      </div>
+      <div class="toolbar">
+        <span class="toolbar-label">群组</span>
+        <select id="search-group"></select>
+        <input type="text" id="search-kw" placeholder="输入关键词..." style="width:220px" onkeydown="if(event.key==='Enter')loadSearch(1)">
+        <button class="btn btn-primary" onclick="loadSearch(1)">搜索</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>时间</th><th>用户</th><th>内容</th></tr></thead>
+          <tbody id="search-list"><tr><td colspan="3"><div class="empty"><div class="empty-icon">🔍</div>输入关键词开始搜索</div></td></tr></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="search-pager"></div>
+    </div>
+
+    <!-- 重复消息日志 -->
+    <div class="page" id="page-duplog">
+      <div class="page-header">
+        <div class="page-title">duplicate_log</div>
+        <div class="page-sub">自动删除的重复消息记录</div>
+      </div>
+      <div class="toolbar">
+        <span class="toolbar-label">群组</span>
+        <select id="dup-group" onchange="loadDupLog(1)"></select>
+        <div class="spacer"></div>
+        <span class="td-mono" style="font-size:12px;color:var(--text2)" id="dup-total"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>触发时间</th><th>用户</th><th>重复次数</th><th>内容</th><th>被删 ID</th></tr></thead>
+          <tbody id="dup-list"><tr><td colspan="5"><div class="empty"><div class="empty-icon">🗑</div>请选择群组</div></td></tr></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="dup-pager"></div>
+    </div>
+
+    <!-- 导出 -->
+    <div class="page" id="page-export">
+      <div class="page-header">
+        <div class="page-title">export</div>
+        <div class="page-sub">导出群组消息日志为 CSV 文件</div>
+      </div>
+      <div class="chart-card" style="max-width:520px">
+        <div class="toolbar" style="flex-direction:column;align-items:flex-start;gap:14px">
+          <div style="width:100%">
+            <div class="api-label" style="margin-bottom:6px">选择群组</div>
+            <select id="exp-group" style="width:100%"></select>
+          </div>
+          <div style="display:flex;gap:12px;width:100%">
+            <div style="flex:1">
+              <div class="api-label" style="margin-bottom:6px">开始日期（可选）</div>
+              <input type="date" id="exp-from" style="width:100%">
+            </div>
+            <div style="flex:1">
+              <div class="api-label" style="margin-bottom:6px">结束日期（可选）</div>
+              <input type="date" id="exp-to" style="width:100%">
+            </div>
+          </div>
+          <button class="btn btn-primary" style="width:100%;padding:10px" onclick="doExport()">下载 CSV</button>
+        </div>
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.8">
+          导出内容包含：发送时间、用户 ID、用户名、消息文本<br>
+          已被删除的重复消息不包含在导出结果中
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ─── 工具 ─────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id)
+let API = localStorage.getItem('tg_api') || 'http://127.0.0.1:8000'
+$('apiBase').value = API
+
+function saveApi() {
+  API = $('apiBase').value.replace(/\/$/, '')
+  localStorage.setItem('tg_api', API)
+}
+
+async function get(path) {
+  const r = await fetch(API + path)
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+function fmt(n) { return Number(n).toLocaleString() }
+function fmtDate(s) {
+  if (!s) return '—'
+  return String(s).replace('T', ' ').slice(0, 19)
+}
+function hl(text, kw) {
+  if (!kw) return esc(text)
+  return esc(text).replace(new RegExp(esc(kw).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi'),
+    m => `<span class="hl">${m}</span>`)
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+// 分页器
+function buildPager(containerId, total, page, size, callback) {
+  const pages = Math.ceil(total / size)
+  const el = $(containerId)
+  if (pages <= 1) { el.innerHTML = ''; return }
+  let html = `<span class="page-info">${fmt(total)} 条</span>`
+  html += `<button class="page-btn" ${page<=1?'disabled':''} onclick="(${callback})(${page-1})">‹</button>`
+  const start = Math.max(1, page-2), end = Math.min(pages, page+2)
+  for (let i = start; i <= end; i++)
+    html += `<button class="page-btn ${i===page?'active':''}" onclick="(${callback})(${i})">${i}</button>`
+  html += `<button class="page-btn" ${page>=pages?'disabled':''} onclick="(${callback})(${page+1})">›</button>`
+  el.innerHTML = html
+}
+
+// ─── 导航 ─────────────────────────────────────────────────────────────────────
+let currentPage = 'overview'
+function nav(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'))
+  $('page-' + page).classList.add('active')
+  event.currentTarget.classList.add('active')
+  currentPage = page
+  if (page === 'overview') loadOverview()
+  if (page === 'rank')     syncGroupSelect('rank-group', loadRank)
+  if (page === 'search')   syncGroupSelect('search-group')
+  if (page === 'duplog')   { syncGroupSelect('dup-group'); loadDupLog(1) }
+  if (page === 'export')   syncGroupSelect('exp-group')
+}
+
+// ─── 群组选择同步 ─────────────────────────────────────────────────────────────
+let groups = []
+async function loadGroups() {
+  try {
+    groups = await get('/groups')
+    const ids = ['ov-group','rank-group','search-group','dup-group','exp-group']
+    ids.forEach(id => {
+      const el = $(id); if (!el) return
+      const cur = el.value
+      el.innerHTML = groups.map(g =>
+        `<option value="${g.id}">${esc(g.title || g.id)}</option>`
+      ).join('')
+      if (cur) el.value = cur
+    })
+    renderGroupTable()
+  } catch(e) { console.error(e) }
+}
+function syncGroupSelect(id, cb) {
+  const el = $(id); if (!el || !groups.length) return
+  el.innerHTML = groups.map(g =>
+    `<option value="${g.id}">${esc(g.title || g.id)}</option>`
+  ).join('')
+}
+function renderGroupTable() {
+  $('group-list').innerHTML = groups.length ? groups.map(g => `
+    <tr>
+      <td>${esc(g.title||'—')}</td>
+      <td class="td-mono td-muted">${g.id}</td>
+      <td class="td-mono">${fmt(g.total_messages||0)}</td>
+      <td class="td-mono" style="color:var(--red)">${fmt(g.deleted_messages||0)}</td>
+      <td><span class="badge ${g.is_active?'badge-green':'badge-red'}">${g.is_active?'active':'paused'}</span></td>
+    </tr>`).join('') : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">📭</div>暂无群组数据</div></td></tr>`
+}
+
+// ─── 概览 ─────────────────────────────────────────────────────────────────────
+let chartDaily = null, chartHourly = null
+
+async function loadOverview() {
+  try {
+    const d = await get('/overview')
+    $('s-groups').textContent = fmt(d.groups)
+    $('s-users').textContent  = fmt(d.users)
+    $('s-msgs').textContent   = fmt(d.messages)
+    $('s-del').textContent    = fmt(d.deleted)
+    $('s-dup').textContent    = fmt(d.dup_events)
+  } catch(e) {}
+
+  const gid = $('ov-group').value
+  if (!gid) return
+
+  const today = new Date(), d30 = new Date(today - 30*864e5)
+  const from = d30.toISOString().slice(0,10), to = today.toISOString().slice(0,10)
+
+  try {
+    const [daily, hourly] = await Promise.all([
+      get(`/stats/daily?chat_id=${gid}&date_from=${from}&date_to=${to}`),
+      get(`/stats/hourly?chat_id=${gid}&date_from=${from}&date_to=${to}`)
+    ])
+    renderDailyChart(daily)
+    renderHourlyChart(hourly)
+  } catch(e) {}
+}
+
+const chartCfg = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { grid: { color: '#1a1e25' }, ticks: { color: '#5a6272', font: { family: 'JetBrains Mono', size: 10 } } },
+    y: { grid: { color: '#1a1e25' }, ticks: { color: '#5a6272', font: { family: 'JetBrains Mono', size: 10 } } }
+  }
+}
+
+function renderDailyChart(data) {
+  if (chartDaily) chartDaily.destroy()
+  chartDaily = new Chart($('chart-daily'), {
+    type: 'line',
+    data: {
+      labels: data.map(d => String(d.day).slice(5)),
+      datasets: [{
+        data: data.map(d => d.count),
+        borderColor: '#4f9cf9', backgroundColor: 'rgba(79,156,249,.08)',
+        borderWidth: 1.5, pointRadius: 2, fill: true, tension: .3
+      }]
+    },
+    options: { ...chartCfg }
+  })
+}
+
+function renderHourlyChart(data) {
+  if (chartHourly) chartHourly.destroy()
+  const hours = Array.from({length:24}, (_,i) => i)
+  const counts = hours.map(h => { const r = data.find(d=>d.hour===h); return r ? r.count : 0 })
+  chartHourly = new Chart($('chart-hourly'), {
+    type: 'bar',
+    data: {
+      labels: hours.map(h => String(h).padStart(2,'0')),
+      datasets: [{
+        data: counts,
+        backgroundColor: counts.map(c => c === Math.max(...counts) ? '#fbbf24' : 'rgba(79,156,249,.5)'),
+        borderRadius: 3
+      }]
+    },
+    options: { ...chartCfg }
+  })
+}
+
+// ─── 排行榜 ───────────────────────────────────────────────────────────────────
+let chartRank = null
+async function loadRank() {
+  const gid   = $('rank-group').value
+  const from  = $('rank-from').value
+  const to    = $('rank-to').value
+  const limit = $('rank-limit').value
+  if (!gid) return
+
+  let url = `/stats/rank?chat_id=${gid}&limit=${limit}`
+  if (from) url += `&date_from=${from}`
+  if (to)   url += `&date_to=${to}`
+
+  try {
+    const data = await get(url)
+    const max  = data[0]?.msg_count || 1
+
+    $('rank-list').innerHTML = data.length ? data.map((r,i) => `
+      <div class="rank-row">
+        <div class="rank-num ${i<3?'top':''}">${i<3?['①','②','③'][i]:i+1}</div>
+        <div class="rank-name">${esc(r.name)}</div>
+        <div class="rank-bar-wrap"><div class="rank-bar" style="width:${(r.msg_count/max*100).toFixed(1)}%"></div></div>
+        <div class="rank-count">${fmt(r.msg_count)}</div>
+      </div>`).join('') :
+      `<div class="empty"><div class="empty-icon">📭</div>暂无数据</div>`
+
+    if (chartRank) chartRank.destroy()
+    chartRank = new Chart($('chart-rank'), {
+      type: 'doughnut',
+      data: {
+        labels: data.slice(0,8).map(r => r.name),
+        datasets: [{
+          data: data.slice(0,8).map(r => r.msg_count),
+          backgroundColor: ['#4f9cf9','#34d399','#fbbf24','#f87171','#a78bfa','#38bdf8','#fb923c','#4ade80'],
+          borderWidth: 0, hoverOffset: 4
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'right', labels: { color: '#9aa3b2', font: { family: 'Noto Sans SC', size: 12 }, boxWidth: 12, padding: 8 } }
+        }
+      }
+    })
+  } catch(e) { console.error(e) }
+}
+
+// ─── 搜索 ─────────────────────────────────────────────────────────────────────
+async function loadSearch(page) {
+  const gid = $('search-group').value
+  const kw  = $('search-kw').value.trim()
+  if (!gid || !kw) return
+
+  $('search-list').innerHTML = `<tr><td colspan="3" class="loading">搜索中</td></tr>`
+  try {
+    const data = await get(`/search?chat_id=${gid}&keyword=${encodeURIComponent(kw)}&page=${page}&size=20`)
+    $('search-list').innerHTML = data.rows.length ? data.rows.map(r => `
+      <tr>
+        <td class="td-mono td-muted" style="white-space:nowrap">${fmtDate(r.created_at)}</td>
+        <td style="white-space:nowrap">${esc(r.name)}</td>
+        <td class="td-content">${hl(r.content||'', kw)}</td>
+      </tr>`).join('') :
+      `<tr><td colspan="3"><div class="empty"><div class="empty-icon">🔍</div>未找到相关消息</div></td></tr>`
+
+    buildPager('search-pager', data.total, page, 20, `p=>loadSearch(p)`)
+  } catch(e) {
+    $('search-list').innerHTML = `<tr><td colspan="3"><div class="empty">请求失败，请检查 API 地址</div></td></tr>`
+  }
+}
+
+// ─── 重复日志 ─────────────────────────────────────────────────────────────────
+async function loadDupLog(page) {
+  const gid = $('dup-group').value
+  if (!gid) return
+
+  $('dup-list').innerHTML = `<tr><td colspan="5" class="loading">加载中</td></tr>`
+  try {
+    const data = await get(`/duplicate-log?chat_id=${gid}&page=${page}&size=20`)
+    $('dup-total').textContent = `共 ${fmt(data.total)} 条记录`
+    $('dup-list').innerHTML = data.rows.length ? data.rows.map(r => {
+      let ids = '—'
+      try { const arr = JSON.parse(r.deleted_ids||'[]'); ids = arr.slice(0,3).join(', ') + (arr.length>3?'…':'') } catch(e){}
+      return `<tr>
+        <td class="td-mono td-muted" style="white-space:nowrap">${fmtDate(r.triggered_at)}</td>
+        <td>${esc(r.name||'—')}</td>
+        <td><span class="badge badge-red">${r.repeat_count} 次</span></td>
+        <td class="td-content">${esc(r.content)}</td>
+        <td class="td-mono td-muted" style="font-size:11px">${ids}</td>
+      </tr>`
+    }).join('') :
+    `<tr><td colspan="5"><div class="empty"><div class="empty-icon">✅</div>暂无重复消息记录</div></td></tr>`
+    buildPager('dup-pager', data.total, page, 20, `p=>loadDupLog(p)`)
+  } catch(e) {
+    $('dup-list').innerHTML = `<tr><td colspan="5"><div class="empty">请求失败</div></td></tr>`
+  }
+}
+
+// ─── 导出 ─────────────────────────────────────────────────────────────────────
+function doExport() {
+  const gid  = $('exp-group').value
+  const from = $('exp-from').value
+  const to   = $('exp-to').value
+  if (!gid) return alert('请选择群组')
+  let url = `${API}/export/csv?chat_id=${gid}`
+  if (from) url += `&date_from=${from}`
+  if (to)   url += `&date_to=${to}`
+  window.open(url, '_blank')
+}
+
+// ─── 初始化 ───────────────────────────────────────────────────────────────────
+async function init() {
+  await loadGroups()
+  await loadOverview()
+}
+init()
+</script>
+</body>
+</html>
