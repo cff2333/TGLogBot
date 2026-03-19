@@ -1,0 +1,47 @@
+services:
+  tg-api:
+    image: python:3.9-slim
+    container_name: tg-api
+    restart: always
+    working_dir: /app
+    volumes:
+      - ./admin_api.py:/app/admin_api.py:ro
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+      - DB_NAME=${DB_NAME:-tg_log}
+    command: >
+      bash -c "pip install fastapi uvicorn aiomysql -q -i https://pypi.tuna.tsinghua.edu.cn/simple && uvicorn admin_api:app --host 0.0.0.0 --port 8000"
+    networks:
+      - admin
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  tg-web:
+    image: nginx:alpine
+    container_name: tg-web
+    restart: always
+    user: root
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    volumes:
+      - ./html:/usr/share/nginx/html
+      - ./conf:/etc/nginx/conf.d
+    depends_on:
+      - tg-api
+    networks:
+      - admin
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
+networks:
+  admin:
+    driver: bridge
