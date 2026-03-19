@@ -253,4 +253,4 @@ docker compose logs -f tg-web     # 查看前端日志
 
 ## License
 
-Apache-2.0 license
+MIT license
