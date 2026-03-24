@@ -101,6 +101,8 @@ def short_hash(text: str) -> str:
 
 async def init_db():
     global pool
+    # 每次 _run_bot 启动时重新创建连接池
+    # 旧 pool 属于已关闭的 event loop，不能复用
     pool = await aiomysql.create_pool(
         host=DB_HOST, port=DB_PORT,
         user=DB_USER, password=DB_PASS,
@@ -343,45 +345,67 @@ def main():
         log.error("请设置 BOT_TOKEN")
         return
 
+    import time as _time
     from telegram.request import HTTPXRequest
 
-    request_kwargs = dict(
-        connection_pool_size=8,
-        connect_timeout=15.0,
-        read_timeout=30.0,
-        write_timeout=30.0,
-        pool_timeout=15.0,
-    )
-    if PROXY_URL:
-        request_kwargs["proxy"] = PROXY_URL
-        log.info(f"代理已启用: {PROXY_URL}")
-    else:
-        log.info("未配置代理，直连 Telegram")
-
-    request = HTTPXRequest(**request_kwargs)
-
-    app = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .request(request)
-        .get_updates_request(request)
-        .post_init(post_init)
-        .build()
-    )
-    app.add_handler(
-        MessageHandler(filters.TEXT & filters.ChatType.GROUPS, on_message)
-    )
     if ALLOWED_CHATS:
         log.info(f"群组白名单已启用，监听范围: {ALLOWED_CHATS}")
     else:
         log.info("群组白名单未配置，监听所有群组")
-    log.info("Bot 启动，开始监听群组消息...")
-    app.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-        poll_interval=1.0,
-        timeout=20,
-    )
+
+    retry_count     = 0
+    max_retry       = int(os.getenv("MAX_RETRY",       "0"))
+    retry_delay     = int(os.getenv("RETRY_DELAY",     "10"))
+    retry_max_delay = int(os.getenv("RETRY_MAX_DELAY", "300"))
+
+    while True:
+        try:
+            request_kwargs = dict(
+                connection_pool_size=8,
+                connect_timeout=15.0,
+                read_timeout=30.0,
+                write_timeout=30.0,
+                pool_timeout=15.0,
+            )
+            if PROXY_URL:
+                request_kwargs["proxy"] = PROXY_URL
+                log.info(f"代理已启用: {PROXY_URL}")
+            else:
+                log.info("未配置代理，直连 Telegram")
+
+            request = HTTPXRequest(**request_kwargs)
+            app = (
+                Application.builder()
+                .token(BOT_TOKEN)
+                .request(request)
+                .get_updates_request(request)
+                .post_init(post_init)
+                .build()
+            )
+            app.add_handler(
+                MessageHandler(filters.TEXT & filters.ChatType.GROUPS, on_message)
+            )
+            log.info("Bot 启动，开始监听群组消息...")
+            app.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,
+                poll_interval=1.0,
+                timeout=20,
+            )
+            log.info("Bot 正常退出")
+            break
+
+        except Exception as e:
+            retry_count += 1
+            delay = min(retry_delay * (2 ** (retry_count - 1)), retry_max_delay)
+            log.error(f"Bot 运行异常（第 {retry_count} 次）: {e}")
+
+            if max_retry and retry_count >= max_retry:
+                log.error(f"已达到最大重试次数 {max_retry}，退出")
+                break
+
+            log.info(f"{delay} 秒后自动重启...")
+            _time.sleep(delay)
 
 
 if __name__ == "__main__":

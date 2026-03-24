@@ -290,6 +290,7 @@ tbody tr:hover td { background: var(--bg2); }
         </select>
         <div class="spacer"></div>
         <button class="btn btn-ghost" onclick="loadOverview()">刷新</button>
+        <button class="btn btn-ghost" id="btn-refresh-cache" onclick="refreshGroupsCache()">刷新群组缓存</button>
       </div>
 
       <div class="stat-grid" id="ov-stats">
@@ -507,6 +508,27 @@ async function loadGroups() {
     })
     renderGroupTable()
   } catch(e) { console.error(e) }
+}
+
+async function refreshGroupsCache() {
+  const btn = $('btn-refresh-cache')
+  const orig = btn.textContent
+  btn.textContent = '刷新中...'
+  btn.disabled = true
+  try {
+    const r = await fetch(API + '/groups/refresh', { method: 'POST' })
+    const d = await r.json()
+    if (d.ok) {
+      await loadGroups()
+      btn.textContent = '已刷新 ✓'
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false }, 2000)
+    } else {
+      throw new Error('刷新失败')
+    }
+  } catch(e) {
+    btn.textContent = '刷新失败'
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false }, 2000)
+  }
 }
 function syncGroupSelect(id, cb) {
   const el = $(id); if (!el || !groups.length) return

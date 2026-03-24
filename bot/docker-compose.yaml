@@ -20,6 +20,9 @@ services:
       - CLEANUP_INTERVAL=60
       - BATCH_INTERVAL=2
       - PROXY_URL=  # 不需要代理则留空或删除此行
+      - MAX_RETRY=0         # 0 = 无限重试，设为正整数则达到上限后退出
+      - RETRY_DELAY=10      # 初始等待秒数
+      - RETRY_MAX_DELAY=300 # 最大等待秒数
     command: >
       bash -c "pip install python-telegram-bot aiomysql -q -i https://pypi.tuna.tsinghua.edu.cn/simple
       && python tg_bot.py"
