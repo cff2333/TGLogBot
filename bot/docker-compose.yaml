@@ -23,6 +23,7 @@ services:
       - MAX_RETRY=0         # 0 = 无限重试，设为正整数则达到上限后退出
       - RETRY_DELAY=10      # 初始等待秒数
       - RETRY_MAX_DELAY=300 # 最大等待秒数
+      - MAX_NET_ERR=5   # 连续网络错误多少次后主动重启，默认 5 次
     command: >
       bash -c "pip install python-telegram-bot aiomysql -q -i https://pypi.tuna.tsinghua.edu.cn/simple
       && python tg_bot.py"

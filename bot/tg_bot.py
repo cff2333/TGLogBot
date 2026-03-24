@@ -362,10 +362,11 @@ def main():
         try:
             request_kwargs = dict(
                 connection_pool_size=8,
-                connect_timeout=15.0,
-                read_timeout=30.0,
-                write_timeout=30.0,
-                pool_timeout=15.0,
+                connect_timeout=10.0,
+                read_timeout=15.0,
+                write_timeout=15.0,
+                pool_timeout=10.0,
+                http_version="1.1",   # 禁用 HTTP/2，减少 TLS 握手复杂度
             )
             if PROXY_URL:
                 request_kwargs["proxy"] = PROXY_URL
@@ -385,6 +386,46 @@ def main():
             app.add_handler(
                 MessageHandler(filters.TEXT & filters.ChatType.GROUPS, on_message)
             )
+
+            # 连续网络错误计数，超过阈值主动停止触发外层重启
+            net_err_count = {"n": 0}
+            max_net_err   = int(os.getenv("MAX_NET_ERR", "5"))
+
+            async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+                import httpx, httpcore
+                from telegram.error import NetworkError, TimedOut
+                err = context.error
+                is_net_err = isinstance(err, (
+                    httpx.ConnectError, httpx.ReadTimeout,
+                    httpx.WriteTimeout, httpcore.ConnectError,
+                    httpcore.ReadTimeout, NetworkError, TimedOut,
+                ))
+                if is_net_err:
+                    net_err_count["n"] += 1
+                    log.warning(
+                        f"网络异常（{net_err_count['n']}/{max_net_err}）: {err}"
+                    )
+                    if net_err_count["n"] >= max_net_err:
+                        log.error("连续网络错误达到上限，主动停止 Bot 触发重启")
+                        await app.stop()
+                else:
+                    net_err_count["n"] = 0   # 非网络错误则重置计数
+                    log.error(f"未处理异常: {err}", exc_info=err)
+
+            app.add_error_handler(error_handler)
+
+            async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+                """捕获框架内部网络异常，记录日志"""
+                import httpx, httpcore
+                err = context.error
+                if isinstance(err, (httpx.ConnectError, httpx.ReadTimeout,
+                                    httpx.WriteTimeout, httpcore.ConnectError,
+                                    httpcore.ReadTimeout)):
+                    log.warning(f"网络异常（将自动重试）: {err}")
+                else:
+                    log.error(f"未处理异常: {err}", exc_info=err)
+
+            app.add_error_handler(error_handler)
             log.info("Bot 启动，开始监听群组消息...")
             app.run_polling(
                 allowed_updates=Update.ALL_TYPES,
